@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>周报生成器 - 奔跑的乌龟</title>
+  <!-- ============================================================
+       周报生成器：输入本周工作内容，一键生成专业周报。
+       纯网页工具，不需要服务器，双击就能用。
+       想改功能：用 Cursor 打开本文件，告诉 AI 你想改什么。
+       ============================================================ -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      background: #f0f6ff;
+      color: #1e293b;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* 顶部标题 */
+    .header {
+      background:
+        radial-gradient(circle at 20% 20%, rgba(14, 165, 233, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 30%, rgba(99, 102, 241, 0.15), transparent 40%),
+        linear-gradient(135deg, #e0f2fe 0%, #ffffff 55%, #e0e7ff 100%);
+      border-bottom: 1px solid #e2e8f0;
+      padding: 32px 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #0284c7, #06b6d4, #6366f1);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: #475569;
+      font-size: 1rem;
+    }
+
+    /* 主体两栏布局 */
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 30px 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 760px) {
+      .container { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(2, 132, 199, 0.08);
+    }
+
+    .panel h2 {
+      font-size: 1.15rem;
+      color: #0284c7;
+      margin-bottom: 16px;
+      border-left: 4px solid #0ea5e9;
+      padding-left: 10px;
+    }
+
+    /* 表单控件 */
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #334155;
+      margin: 14px 0 6px;
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      color: #1e293b;
+      background: #f8fafc;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus, textarea:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      background: #ffffff;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    /* 按钮 */
+    .btn {
+      display: inline-block;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      margin-top: 18px;
+      width: 100%;
+      padding: 12px;
+      font-size: 1.05rem;
+    }
+
+    .btn-primary:hover { background: #0369a1; }
+
+    .btn-small {
+      background: #e0f2fe;
+      color: #0369a1;
+      margin-right: 8px;
+      margin-top: 12px;
+    }
+
+    .btn-small:hover { background: #bae6fd; }
+
+    .btn-gray {
+      background: #e2e8f0;
+      color: #475569;
+      margin-top: 12px;
+    }
+
+    /* 输出区域 */
+    .output {
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 0.92rem;
+      line-height: 1.9;
+      color: #1e293b;
+      max-height: 480px;
+      overflow-y: auto;
+    }
+
+    .output.show { display: block; }
+
+    .empty-tip {
+      color: #94a3b8;
+      text-align: center;
+      padding: 60px 0;
+      font-size: 0.95rem;
+    }
+
+    .empty-tip.hide { display: none; }
+
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 24px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, transform 0.3s;
+      z-index: 99;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* 页脚 */
+    footer {
+      text-align: center;
+      padding: 24px 20px;
+      color: #94a3b8;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>📝 周报生成器</h1>
+    <p>输入本周工作内容，一键生成专业周报，复制粘贴就能交差</p>
+  </div>
+
+  <div class="container">
+    <!-- 左栏：输入 -->
+    <div class="panel">
+      <h2>① 填写信息</h2>
+
+      <label>姓名</label>
+      <input type="text" id="name" placeholder="例如：奔跑的乌龟">
+
+      <label>部门 / 岗位（可留空）</label>
+      <input type="text" id="dept" placeholder="例如：技术部 / 运营专员">
+
+      <label>本周工作内容（一行写一件事）</label>
+      <textarea id="work" placeholder="例如：&#10;完成官网首页改版并上线&#10;对接 3 位客户需求并整理方案&#10;修复线上数据统计 bug"></textarea>
+
+      <label>下周工作计划（一行写一件事）</label>
+      <textarea id="plan" placeholder="例如：&#10;完成注册功能开发&#10;准备周会汇报材料"></textarea>
+
+      <label>遇到的问题（可选，可留空）</label>
+      <textarea id="problem" placeholder="例如：部分老客户对新版界面不熟悉，需要制作操作指引"></textarea>
+
+      <label>需要的支持（可选，可留空）</label>
+      <textarea id="support" placeholder="例如：需要设计同事配合出一版 banner 图"></textarea>
+
+      <button class="btn btn-primary" onclick="generate()">✨ 生成周报</button>
+    </div>
+
+    <!-- 右栏：输出 -->
+    <div class="panel">
+      <h2>② 生成的周报</h2>
+      <div class="empty-tip" id="emptyTip">在左边填好内容，点「生成周报」<br>结果会出现在这里 ✍️</div>
+      <div class="output" id="output"></div>
+      <div id="btns" style="display:none;">
+        <button class="btn btn-small" onclick="copyReport()">📋 一键复制</button>
+        <button class="btn btn-small" onclick="downloadReport()">💾 下载 txt</button>
+        <button class="btn btn-gray" onclick="clearAll()">🗑️ 清空重来</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>🖥️ 奔跑的乌龟出品 · 纯网页工具，你的内容不会上传到任何服务器</footer>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ============================================================
+    // 下面是"逻辑"部分：负责把输入变成周报。
+    // 小白可以先不用懂，等你装了 Cursor，可以问 AI 每一行是干嘛的。
+    // ============================================================
+
+    // 自动保存：刷新页面后内容不丢
+    const SAVE_KEY = 'weekly_report_data';
+    function saveData() {
+      const data = {
+        name: document.getElementById('name').value,
+        dept: document.getElementById('dept').value,
+        work: document.getElementById('work').value,
+        plan: document.getElementById('plan').value,
+        problem: document.getElementById('problem').value,
+        support: document.getElementById('support').value
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    }
+    function loadData() {
+      try {
+        const data = JSON.parse(localStorage.getItem(SAVE_KEY));
+        if (data) {
+          document.getElementById('name').value = data.name || '';
+          document.getElementById('dept').value = data.dept || '';
+          document.getElementById('work').value = data.work || '';
+          document.getElementById('plan').value = data.plan || '';
+          document.getElementById('problem').value = data.problem || '';
+          document.getElementById('support').value = data.support || '';
+        }
+      } catch (e) {}
+    }
+    // 每次输入都自动保存
+    ['name','dept','work','plan','problem','support'].forEach(id => {
+      document.getElementById(id).addEventListener('input', saveData);
+    });
+
+    // 把多行文字变成 "1. xxx" 的编号列表
+    function toList(text) {
+      return text.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map((line, i) => (i + 1) + '. ' + line)
+        .join('\n');
+    }
+
+    // 生成本周一 ~ 本周日的日期范围（自动计算）
+    function getThisWeekRange() {
+      const now = new Date();
+      const day = now.getDay();            // 0=周日,1=周一...
+      const diff = day === 0 ? 6 : day - 1; // 距离本周一差几天
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diff);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const fmt = d => (d.getMonth() + 1) + '月' + d.getDate() + '日';
+      return fmt(monday) + ' - ' + fmt(sunday) + '（' + now.getFullYear() + '年）';
+    }
+
+    function generate() {
+      const name = document.getElementById('name').value.trim() || '（未填写）';
+      const dept = document.getElementById('dept').value.trim();
+      const work = document.getElementById('work').value.trim();
+      const plan = document.getElementById('plan').value.trim();
+      const problem = document.getElementById('problem').value.trim();
+      const support = document.getElementById('support').value.trim();
+
+      if (!work) {
+        showToast('⚠️ 请先填写「本周工作内容」');
+        return;
+      }
+
+      const lines = [];
+      lines.push('【周报】' + name + (dept ? '｜' + dept : ''));
+      lines.push('汇报周期：' + getThisWeekRange());
+      lines.push('');
+      lines.push('一、本周工作总结');
+      lines.push(toList(work));
+      if (plan) {
+        lines.push('');
+        lines.push('二、下周工作计划');
+        lines.push(toList(plan));
+      }
+      if (problem) {
+        lines.push('');
+        lines.push('三、遇到的问题');
+        lines.push(toList(problem));
+      }
+      if (support) {
+        lines.push('');
+        lines.push('四、需要的支持与建议');
+        lines.push(toList(support));
+      }
+
+      const text = lines.join('\n');
+      document.getElementById('output').textContent = text;
+      document.getElementById('output').classList.add('show');
+      document.getElementById('emptyTip').classList.add('hide');
+      document.getElementById('btns').style.display = 'block';
+      showToast('✅ 周报生成成功！');
+    }
+
+    function copyReport() {
+      const text = document.getElementById('output').textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast('📋 已复制到剪贴板！'));
+      } else {
+        // 老浏览器备用方案
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('📋 已复制到剪贴板！');
+      }
+    }
+
+    function downloadReport() {
+      const name = document.getElementById('name').value.trim() || '周报';
+      const text = document.getElementById('output').textContent;
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '周报_' + name + '.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('💾 已下载！');
+    }
+
+    function clearAll() {
+      ['name','dept','work','plan','problem','support'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      localStorage.removeItem(SAVE_KEY);
+      document.getElementById('output').textContent = '';
+      document.getElementById('output').classList.remove('show');
+      document.getElementById('emptyTip').classList.remove('hide');
+      document.getElementById('btns').style.display = 'none';
+      showToast('🗑️ 已清空');
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    // 页面打开时恢复上次填写的内容
+    loadData();
+  </script>
+</body>
+</html>
