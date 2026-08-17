@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>免费AI聊天 - 奔跑的乌龟</title>
   <!-- ============================================================
-       免费 AI 聊天工具（BYOK 模式：自带密钥，网页只在你浏览器里存密钥）
-       模型来源：硅基流动 SiliconFlow（91+ 个模型，含大量免费模型）
+       免费 AI 聊天工具（多平台版）
+       支持：智谱（GLM-4-Flash 永久免费）/ 硅基流动（91+ 模型，低价）/ 自定义
+       密钥只存在你自己的浏览器里，不会上传到任何服务器
        想改功能：用 Cursor 打开本文件，告诉 AI 你想改什么。
        ============================================================ -->
   <style>
@@ -54,7 +55,7 @@
       transition: max-height 0.3s ease;
     }
 
-    .settings.open { max-height: 400px; padding: 16px 20px; }
+    .settings.open { max-height: 460px; padding: 16px 20px; }
 
     .settings label {
       display: block;
@@ -64,7 +65,7 @@
       margin: 10px 0 4px;
     }
 
-    .settings input[type="password"], .settings select {
+    .settings input[type="password"], .settings input[type="text"], .settings select {
       width: 100%;
       max-width: 480px;
       padding: 8px 12px;
@@ -81,7 +82,7 @@
       background: #ffffff;
     }
 
-    .settings .note { font-size: 0.78rem; color: #94a3b8; margin-top: 8px; }
+    .settings .note { font-size: 0.78rem; color: #94a3b8; margin-top: 8px; line-height: 1.8; }
 
     /* 聊天区 */
     .chat {
@@ -250,25 +251,38 @@
 
   <!-- 设置面板 -->
   <div class="settings" id="settings">
-    <label>① 你的硅基流动 API 密钥（sk- 开头）</label>
-    <input type="password" id="apiKey" placeholder="没有？去 siliconflow.cn 注册，免费领">
-    <label>② 选择模型（点下面按钮可刷新列表）</label>
+    <label>① 选择平台</label>
+    <select id="platform" onchange="onPlatformChange()">
+      <option value="zhipu">智谱（GLM-4-Flash 永久免费，推荐）</option>
+      <option value="siliconflow">硅基流动（91 个模型，低价）</option>
+      <option value="custom">自定义接口（高级）</option>
+    </select>
+    <div id="customBaseWrap" style="display:none;">
+      <label>自定义接口地址</label>
+      <input type="text" id="customBase" placeholder="例如 https://api.xxx.com/v1">
+    </div>
+    <label>② 你的 API 密钥</label>
+    <input type="password" id="apiKey" placeholder="粘贴 sk- 开头的密钥">
+    <label>③ 选择模型（点下面按钮刷新列表）</label>
     <select id="modelSelect"><option value="">（先填密钥再加载模型）</option></select>
     <div style="margin-top:10px;">
       <button class="btn" style="padding:8px 18px;font-size:0.85rem;" onclick="saveSettings()">💾 保存并加载模型</button>
       <button class="btn btn-ghost" style="padding:8px 18px;font-size:0.85rem;" onclick="loadModels()">🔄 刷新模型列表</button>
     </div>
-    <div class="note">🔒 密钥只保存在你自己的浏览器里（localStorage），不会上传到任何服务器。
-      免费模型限速较严，够日常聊天和学习用；想更快可换付费模型。</div>
+    <div class="note">
+      🔒 密钥只保存在你自己的浏览器里，不会上传到任何服务器。<br>
+      💡 想永久免费：选「智谱」，去 open.bigmodel.cn 注册（手机号即可），GLM-4-Flash 官方长期免费。<br>
+      💡 想用 DeepSeek 等：选「硅基流动」，充值 1 元能用很久（低价付费）。
+    </div>
   </div>
 
   <!-- 聊天区 -->
   <div class="chat" id="chat">
     <div class="welcome" id="welcome">
       你好！我是你的免费 AI 助手 🤖<br>
-      👉 先点右上角「⚙️ 设置密钥」，填入你的硅基流动密钥<br>
-      然后选个模型，就可以开始聊天了<br>
-      <span style="font-size:0.85rem;color:#cbd5e1">（默认模型 DeepSeek-V4-Flash 是免费的）</span>
+      👉 先点右上角「⚙️ 设置密钥」，选平台、填密钥、加载模型<br>
+      然后就可以开始聊天了<br>
+      <span style="font-size:0.85rem;color:#cbd5e1">💡 推荐「智谱」平台：GLM-4-Flash 永久免费</span>
     </div>
   </div>
 
@@ -283,47 +297,65 @@
 
   <script>
     // ============================================================
-    // 逻辑部分：负责调用硅基流动的 AI 接口
+    // 逻辑部分：多平台 AI 聊天
     // ============================================================
 
-    const API_BASE = 'https://api.siliconflow.cn/v1';
     const chatEl = document.getElementById('chat');
     const welcomeEl = document.getElementById('welcome');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('sendBtn');
     const keyInput = document.getElementById('apiKey');
     const modelSelect = document.getElementById('modelSelect');
+    const platformSelect = document.getElementById('platform');
+    const customBaseInput = document.getElementById('customBase');
 
-    let messages = [];      // 对话历史
-    let busy = false;       // 正在请求中？
+    let messages = [];
+    let busy = false;
 
     // ---------- 本地存储 ----------
-    function getKey() { return localStorage.getItem('sf_key') || ''; }
-    function saveKey(k) { localStorage.setItem('sf_key', k); }
+    function getKey() { return localStorage.getItem('ai_key') || ''; }
+    function saveKey(k) { localStorage.setItem('ai_key', k); }
+    function getPlatform() { return localStorage.getItem('ai_platform') || 'zhipu'; }
+    function getCustomBase() { return localStorage.getItem('ai_custom_base') || ''; }
+
+    // 根据平台得到接口地址
+    function getBase() {
+      const p = getPlatform();
+      if (p === 'siliconflow') return 'https://api.siliconflow.cn/v1';
+      if (p === 'zhipu') return 'https://open.bigmodel.cn/api/paas/v4';
+      return getCustomBase() || 'https://api.siliconflow.cn/v1';
+    }
+
+    function onPlatformChange() {
+      const p = platformSelect.value;
+      document.getElementById('customBaseWrap').style.display = p === 'custom' ? 'block' : 'none';
+      if (p === 'custom') customBaseInput.value = getCustomBase();
+      if (getKey()) loadModels();
+    }
 
     // ---------- 加载模型列表 ----------
     async function loadModels() {
       const key = getKey();
       if (!key) { showToast('⚠️ 请先填写密钥'); return; }
       try {
-        const r = await fetch(API_BASE + '/models', {
+        const r = await fetch(getBase() + '/models', {
           headers: { Authorization: 'Bearer ' + key }
         });
         if (r.status === 401) { showToast('❌ 密钥无效，请检查是否复制完整'); return; }
-        if (!r.ok) { showToast('❌ 加载失败: ' + r.status); return; }
+        if (!r.ok) { showToast('❌ 加载失败: HTTP ' + r.status); return; }
         const b = await r.json();
         const models = (b.data || []).map(x => x.id);
+        if (models.length === 0) { showToast('❌ 平台没有返回模型列表'); return; }
         modelSelect.innerHTML = '';
         models.forEach(id => {
           const opt = document.createElement('option');
           opt.value = id;
-          // 免费模型标记
-          const isFree = /flash|free|qwen2\.5-7b|glm-4-9b|deepseek-v4-flash/i.test(id);
-          opt.textContent = id + (isFree ? '（免费）' : '');
+          const isFree = /flash|free|glm-4-9b|qwen2\.5-7b|ernie-speed/i.test(id);
+          opt.textContent = id + (isFree ? '（可能免费）' : '');
           modelSelect.appendChild(opt);
         });
-        // 默认选中免费模型
-        const def = models.find(id => /deepseek-v4-flash|glm-4-flash|qwen2\.5-7b/i.test(id)) || models[0];
+        // 默认选免费/轻量模型
+        const def = models.find(id => /glm-4-flash|glm-4-9b|deepseek-v4-flash|qwen2\.5-7b/i.test(id)) || models[0];
         if (def) modelSelect.value = def;
         showToast('✅ 已加载 ' + models.length + ' 个模型');
         return true;
@@ -336,7 +368,12 @@
     // ---------- 保存设置 ----------
     function saveSettings() {
       const k = keyInput.value.trim();
-      if (k) { saveKey(k); showToast('✅ 密钥已保存（只存在本浏览器）'); }
+      if (k) saveKey(k);
+      localStorage.setItem('ai_platform', platformSelect.value);
+      if (platformSelect.value === 'custom' && customBaseInput.value.trim()) {
+        localStorage.setItem('ai_custom_base', customBaseInput.value.trim());
+      }
+      showToast('✅ 设置已保存（只存在本浏览器）');
       loadModels();
       toggleSettings(false);
     }
@@ -345,7 +382,11 @@
       const s = document.getElementById('settings');
       const shouldOpen = force !== undefined ? force : !s.classList.contains('open');
       s.classList.toggle('open', shouldOpen);
-      if (shouldOpen) keyInput.value = getKey();
+      if (shouldOpen) {
+        keyInput.value = getKey();
+        platformSelect.value = getPlatform();
+        onPlatformChange();
+      }
     }
 
     // ---------- 渲染消息 ----------
@@ -395,9 +436,8 @@
       const key = getKey();
       if (!key) { showToast('⚠️ 请先点右上角「⚙️ 设置密钥」'); toggleSettings(true); return; }
       const model = modelSelect.value;
-      if (!model) { showToast('⚠️ 请先加载模型列表'); return; }
+      if (!model) { showToast('⚠️ 请先保存设置并加载模型'); return; }
 
-      // 用户消息入列并显示
       messages.push({ role: 'user', content: text });
       addMsg('user', text);
       inputEl.value = '';
@@ -406,7 +446,7 @@
       showThinking();
 
       try {
-        const r = await fetch(API_BASE + '/chat/completions', {
+        const r = await fetch(getBase() + '/chat/completions', {
           method: 'POST',
           headers: {
             Authorization: 'Bearer ' + key,
@@ -423,11 +463,19 @@
         removeThinking();
 
         if (!r.ok) {
-          const msg = (b.message || b.error || {}).message || ('HTTP ' + r.status);
-          showToast('❌ 出错了: ' + msg);
-          // 密钥错误时把失败消息回滚，避免污染历史
-          if (r.status === 401) { messages.pop(); return; }
-          // 其他错误（限速等）：提示但保留对话
+          if (r.status === 401) {
+            showToast('❌ 密钥无效，请检查是否复制完整');
+            messages.pop();
+          } else if (r.status === 402) {
+            showToast('❌ 账户余额不足：换「智谱」平台用免费模型，或在平台充值');
+            messages.pop();
+          } else if (r.status === 429) {
+            showToast('⏳ 请求太频繁（限速），等 1 分钟再试');
+          } else {
+            const msg = (b.message || b.error || {}).message || ('HTTP ' + r.status);
+            showToast('❌ 出错了: ' + msg);
+            messages.pop();
+          }
           return;
         }
 
@@ -464,10 +512,12 @@
       t.textContent = msg;
       t.classList.add('show');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
     }
 
-    // 页面打开：如果有密钥就自动加载模型
+    // 页面打开：恢复设置，有密钥就加载模型
+    platformSelect.value = getPlatform();
+    onPlatformChange();
     if (getKey()) loadModels();
   </script>
 </body>
